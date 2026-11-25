@@ -27,10 +27,8 @@ A home lab for practising Linux administration and automation: RHEL-family and D
 
 ## Usage
 
-~~bash
-ansible all -m ping -o
-ansible-playbook vmtools.yml
-~~
+    ansible all -m ping -o
+    ansible-playbook vmtools.yml
 
 ## Roadmap
 
