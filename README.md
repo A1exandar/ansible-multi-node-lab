@@ -27,16 +27,17 @@ A home lab for practising Linux administration and automation: RHEL-family and D
 
 ## Usage
 
-```bash
+~~bash
 ansible all -m ping -o
 ansible-playbook vmtools.yml
+~~
 
-Roadmap
+## Roadmap
 
 1. Inventory and cross-distro playbooks (done)
 2. Security baseline: OpenSCAP (PCI-DSS profile), auditd, AIDE
-3. Central logging and monitoring on mon1
+3. Central logging and monitoring on `mon1`
 4. Patching, backups with restore tests, internal CA
 5. Incident simulations with short write-ups
 
-Write-ups of the individual tasks: a1exnotes.com/labs (https://a1exnotes.com/labs/)
+Write-ups of the individual tasks: [a1exnotes.com/labs](https://a1exnotes.com/labs/)
