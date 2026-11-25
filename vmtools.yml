@@ -1,0 +1,20 @@
+---
+- name: VMware Tools na svim mašinama
+  hosts: all
+  tasks:
+    - name: Osveži apt keš (samo Debian)
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+
+    - name: Instaliraj open-vm-tools
+      ansible.builtin.package:
+        name: open-vm-tools
+        state: present
+
+    - name: Pokreni servis i uključi ga pri startu
+      ansible.builtin.service:
+        name: "{{ 'open-vm-tools' if ansible_os_family == 'Debian' else 'vmtoolsd' }}"
+        state: started
+        enabled: true

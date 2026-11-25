@@ -1,0 +1,10 @@
+[rhel]
+server1
+server2
+mon1
+
+[debian]
+deb1
+
+[monitoring]
+mon1
