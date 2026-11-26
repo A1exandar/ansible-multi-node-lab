@@ -77,6 +77,16 @@
         path: /etc/ssh/sshd_config.d/01-permitrootlogin.conf
         state: absent
       notify: Reload sshd
+    - name: Our SSH settings appear in no other file
+      ansible.builtin.lineinfile:
+        path: "{{ item.0 }}"
+        regexp: '^\s*{{ item.1 }}\s'
+        state: absent
+        validate: /usr/sbin/sshd -t -f %s
+      loop: "{{ ['/etc/ssh/sshd_config', '/etc/ssh/sshd_config.d/50-redhat.conf'] | product(pci_sshd.keys()) | list }}"
+      loop_control:
+        label: "{{ item.0 | basename }}: {{ item.1 }}"
+      notify: Reload sshd
     - name: SSH server settings
       ansible.builtin.copy:
         dest: /etc/ssh/sshd_config.d/01-pci.conf
