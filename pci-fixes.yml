@@ -31,6 +31,70 @@
       MaxStartups: "10:30:100"
       LogLevel: VERBOSE
       AllowUsers: ansible alex
+    # svako pravilo se upisuje za arch=b32 i arch=b64
+    pci_audit_rules:
+      # korisnici, grupe, lozinke
+      - '-F path=/etc/passwd -F perm=wa -F key=audit_rules_usergroup_modification'
+      - '-F path=/etc/group -F perm=wa -F key=audit_rules_usergroup_modification'
+      - '-F path=/etc/shadow -F perm=wa -F key=audit_rules_usergroup_modification'
+      - '-F path=/etc/gshadow -F perm=wa -F key=audit_rules_usergroup_modification'
+      - '-F path=/etc/security/opasswd -F perm=wa -F key=audit_rules_usergroup_modification'
+      # sudo
+      - '-F path=/etc/sudoers -F perm=wa -F key=actions'
+      - '-F dir=/etc/sudoers.d/ -F perm=wa -F key=actions'
+      - '-F path=/var/log/sudo.log -F perm=wa -F key=maintenance'
+      # SELinux politika
+      - '-F dir=/etc/selinux/ -F perm=wa -F key=MAC-policy'
+      # sesije i prijave
+      - '-F path=/var/run/utmp -F perm=wa -F key=session'
+      - '-F path=/var/log/btmp -F perm=wa -F key=session'
+      - '-F path=/var/log/wtmp -F perm=wa -F key=session'
+      - '-F path=/var/log/faillock -F perm=wa -F key=logins'
+      - '-F path=/var/log/lastlog -F perm=wa -F key=logins'
+      - '-F path=/var/log/tallylog -F perm=wa -F key=logins'
+      # vreme
+      - '-S adjtimex -F key=audit_time_rules'
+      - '-S settimeofday -F key=audit_time_rules'
+      - '-S clock_settime -F a0=0x0 -F key=time-change'
+      - '-F path=/etc/localtime -F perm=wa -F key=audit_time_rules'
+      # mreža (ime hosta)
+      - '-S sethostname,setdomainname -F key=audit_rules_networkconfig_modification'
+      # mount (iznošenje podataka na USB i sl.)
+      - '-S mount -F auid>=1000 -F auid!=unset -F key=export'
+      # pokretanje SUID/SGID programa koji daju root
+      - '-S execve -C uid!=euid -F euid=0 -F key=setuid'
+      - '-S execve -C gid!=egid -F egid=0 -F key=setgid'
+      # ko čita audit logove
+      - '-F dir=/var/log/audit/ -F perm=r -F auid>=1000 -F auid!=unset -F key=access-audit-trail'
+      # promene dozvola i vlasnika
+      - '-S fchmod -F auid>=1000 -F auid!=unset -F key=perm_mod'
+      - '-S fchmodat -F auid>=1000 -F auid!=unset -F key=perm_mod'
+      - '-S fchmodat2 -F auid>=1000 -F auid!=unset -F key=perm_mod'
+      - '-S fchown -F auid>=1000 -F auid!=unset -F key=perm_mod'
+      - '-S fchownat -F auid>=1000 -F auid!=unset -F key=perm_mod'
+      # prošireni atributi (xattr): običan korisnik i root
+      - '-S setxattr -F auid>=1000 -F auid!=unset -F key=perm_mod'
+      - '-S setxattr -F auid=0 -F key=perm_mod'
+      - '-S lsetxattr -F auid>=1000 -F auid!=unset -F key=perm_mod'
+      - '-S lsetxattr -F auid=0 -F key=perm_mod'
+      - '-S fsetxattr -F auid>=1000 -F auid!=unset -F key=perm_mod'
+      - '-S fsetxattr -F auid=0 -F key=perm_mod'
+      - '-S removexattr -F auid>=1000 -F auid!=unset -F key=perm_mod'
+      - '-S removexattr -F auid=0 -F key=perm_mod'
+      - '-S lremovexattr -F auid>=1000 -F auid!=unset -F key=perm_mod'
+      - '-S lremovexattr -F auid=0 -F key=perm_mod'
+      - '-S fremovexattr -F auid>=1000 -F auid!=unset -F key=perm_mod'
+      - '-S fremovexattr -F auid=0 -F key=perm_mod'
+      # brisanje i preimenovanje fajlova
+      - '-S unlinkat -F auid>=1000 -F auid!=unset -F key=delete'
+      - '-S renameat -F auid>=1000 -F auid!=unset -F key=delete'
+      - '-S renameat2 -F auid>=1000 -F auid!=unset -F key=delete'
+    # watch pravila ne zavise od arhitekture
+    pci_audit_watches:
+      - '-w /etc/issue -p wa -k audit_rules_networkconfig_modification'
+      - '-w /etc/issue.net -p wa -k audit_rules_networkconfig_modification'
+      - '-w /etc/hosts -p wa -k audit_rules_networkconfig_modification'
+      - '-w /etc/sysconfig/network -p wa -k audit_rules_networkconfig_modification'
   tasks:
     # --- Potpisi paketa ---
     - name: Which signing keys are imported
@@ -77,6 +141,7 @@
         path: /etc/ssh/sshd_config.d/01-permitrootlogin.conf
         state: absent
       notify: Reload sshd
+
     - name: Our SSH settings appear in no other file
       ansible.builtin.lineinfile:
         path: "{{ item.0 }}"
@@ -87,6 +152,7 @@
       loop_control:
         label: "{{ item.0 | basename }}: {{ item.1 }}"
       notify: Reload sshd
+
     - name: SSH server settings
       ansible.builtin.copy:
         dest: /etc/ssh/sshd_config.d/01-pci.conf
@@ -109,6 +175,22 @@
         mode: "0644"
       notify: Load sysctl settings
 
+    # --- Audit pravila ---
+    - name: Audit rules
+      ansible.builtin.copy:
+        dest: /etc/audit/rules.d/50-pci.rules
+        content: |
+          {% for arch in ['b32', 'b64'] %}
+          {% for rule in pci_audit_rules %}
+          -a always,exit -F arch={{ arch }} {{ rule }}
+          {% endfor %}
+          {% endfor %}
+          {% for watch in pci_audit_watches %}
+          {{ watch }}
+          {% endfor %}
+        mode: "0600"
+      notify: Load audit rules
+
   handlers:
     - name: Reload sshd
       ansible.builtin.service:
@@ -117,3 +199,6 @@
 
     - name: Load sysctl settings
       ansible.builtin.command: sysctl --system
+
+    - name: Load audit rules
+      ansible.builtin.command: augenrules --load
