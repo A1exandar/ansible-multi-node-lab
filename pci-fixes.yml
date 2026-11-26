@@ -1,6 +1,7 @@
 - name: PCI-DSS fixes
   hosts: server1
   tasks:
+    # --- Potpisi paketa ---
     - name: Which signing keys are imported
       ansible.builtin.command: rpm -q gpg-pubkey
       register: gpg_keys
@@ -27,3 +28,29 @@
         line: gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
         insertafter: '^gpgcheck='
       loop: [BaseOS, AppStream]
+
+    # --- Prazne lozinke ---
+    - name: Read the current authselect setup
+      ansible.builtin.command: authselect current
+      register: authselect_now
+      changed_when: false
+      check_mode: false
+
+    - name: PAM refuses empty passwords
+      ansible.builtin.command: authselect enable-feature without-nullok
+      when: "'without-nullok' not in authselect_now.stdout"
+
+    - name: SSH refuses empty passwords
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/01-pci.conf
+        content: |
+          PermitEmptyPasswords no
+        mode: "0600"
+        validate: /usr/sbin/sshd -t -f %s
+      notify: Reload sshd
+
+  handlers:
+    - name: Reload sshd
+      ansible.builtin.service:
+        name: sshd
+        state: reloaded
