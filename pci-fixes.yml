@@ -15,6 +15,22 @@
       kernel.randomize_va_space: 2
       fs.suid_dumpable: 0
       kernel.core_pattern: "|/bin/false"
+    pci_sshd:
+      PermitEmptyPasswords: "no"
+      PermitRootLogin: "no"
+      HostbasedAuthentication: "no"
+      IgnoreRhosts: "yes"
+      PermitUserEnvironment: "no"
+      X11Forwarding: "no"
+      AllowTcpForwarding: "no"
+      ClientAliveInterval: 900
+      ClientAliveCountMax: 1
+      LoginGraceTime: 60
+      MaxAuthTries: 4
+      MaxSessions: 10
+      MaxStartups: "10:30:100"
+      LogLevel: VERBOSE
+      AllowUsers: ansible alex
   tasks:
     # --- Potpisi paketa ---
     - name: Which signing keys are imported
@@ -44,7 +60,7 @@
         insertafter: '^gpgcheck='
       loop: [BaseOS, AppStream]
 
-    # --- Prazne lozinke ---
+    # --- Prazne lozinke (PAM) ---
     - name: Read the current authselect setup
       ansible.builtin.command: authselect current
       register: authselect_now
@@ -55,11 +71,19 @@
       ansible.builtin.command: authselect enable-feature without-nullok
       when: "'without-nullok' not in authselect_now.stdout"
 
-    - name: SSH refuses empty passwords
+    # --- SSH server ---
+    - name: Installer's root login file is removed
+      ansible.builtin.file:
+        path: /etc/ssh/sshd_config.d/01-permitrootlogin.conf
+        state: absent
+      notify: Reload sshd
+    - name: SSH server settings
       ansible.builtin.copy:
         dest: /etc/ssh/sshd_config.d/01-pci.conf
         content: |
-          PermitEmptyPasswords no
+          {% for key, value in pci_sshd.items() %}
+          {{ key }} {{ value }}
+          {% endfor %}
         mode: "0600"
         validate: /usr/sbin/sshd -t -f %s
       notify: Reload sshd
