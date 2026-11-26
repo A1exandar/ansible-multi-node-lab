@@ -230,6 +230,14 @@
     - name: Kernel audits from boot (needs reboot)
       ansible.builtin.command: grubby --update-kernel=ALL --args="audit=1 audit_backlog_limit=8192"
       when: "'audit_backlog_limit=8192' not in grub_now.stdout"
+# --- Audit pravila se zaključavaju (posle ovoga izmena traži reboot) ---
+    - name: Audit rules are immutable
+      ansible.builtin.copy:
+        dest: /etc/audit/rules.d/99-finalize.rules
+        content: |
+          -e 2
+        mode: "0600"
+      notify: Load audit rules
   handlers:
     - name: Reload sshd
       ansible.builtin.service:
