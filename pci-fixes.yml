@@ -191,6 +191,45 @@
         mode: "0600"
       notify: Load audit rules
 
+# --- auditd.conf, syslog plugin, kernel ---
+    - name: auditd settings
+      ansible.builtin.lineinfile:
+        path: /etc/audit/auditd.conf
+        regexp: '^\s*{{ item.key }}\s*='
+        line: "{{ item.key }} = {{ item.value }}"
+      loop:
+        - { key: space_left, value: 100 }
+        - { key: space_left_action, value: email }
+        - { key: admin_space_left_action, value: single }
+        - { key: name_format, value: fqd }
+      register: auditd_conf
+
+    - name: Audit plugins are installed
+      ansible.builtin.dnf:
+        name: audispd-plugins
+        state: present
+
+    - name: Audit events also go to syslog
+      ansible.builtin.lineinfile:
+        path: /etc/audit/plugins.d/syslog.conf
+        regexp: '^\s*active\s*='
+        line: active = yes
+      register: syslog_plugin
+
+    # systemctl restart auditd ne radi (auditd odbija), samo service
+    - name: Restart auditd if its config changed
+      ansible.builtin.command: service auditd restart
+      when: auditd_conf is changed or syslog_plugin is changed
+
+    - name: Read kernel arguments
+      ansible.builtin.command: grubby --info=ALL
+      register: grub_now
+      changed_when: false
+      check_mode: false
+
+    - name: Kernel audits from boot (needs reboot)
+      ansible.builtin.command: grubby --update-kernel=ALL --args="audit=1 audit_backlog_limit=8192"
+      when: "'audit_backlog_limit=8192' not in grub_now.stdout"
   handlers:
     - name: Reload sshd
       ansible.builtin.service:
