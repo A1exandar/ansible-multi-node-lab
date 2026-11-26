@@ -1,0 +1,29 @@
+- name: PCI-DSS fixes
+  hosts: server1
+  tasks:
+    - name: Which signing keys are imported
+      ansible.builtin.command: rpm -q gpg-pubkey
+      register: gpg_keys
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    # rpm_key ne radi: gpg ne čita v6 (post-quantum) ključ iz RHEL 10.1
+    - name: Red Hat signing key is imported
+      ansible.builtin.command: rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+      when: gpg_keys.rc != 0
+
+    - name: Local repos check package signatures
+      ansible.builtin.lineinfile:
+        path: "/etc/yum.repos.d/{{ item }}.repo"
+        regexp: '^gpgcheck='
+        line: gpgcheck=1
+      loop: [BaseOS, AppStream]
+
+    - name: Local repos know which key to use
+      ansible.builtin.lineinfile:
+        path: "/etc/yum.repos.d/{{ item }}.repo"
+        regexp: '^gpgkey='
+        line: gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+        insertafter: '^gpgcheck='
+      loop: [BaseOS, AppStream]
