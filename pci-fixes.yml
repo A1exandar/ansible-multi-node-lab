@@ -238,6 +238,99 @@
           -e 2
         mode: "0600"
       notify: Load audit rules
+# --- Bezbedna grupa: cron, coredumps, moduli, lozinke, AIDE ---
+    - name: cron directories only for root
+      ansible.builtin.file:
+        path: "{{ item }}"
+        mode: "0700"
+      loop: [/etc/cron.d, /etc/cron.hourly, /etc/cron.daily, /etc/cron.weekly, /etc/cron.monthly]
+
+    - name: crontab only for root
+      ansible.builtin.file:
+        path: /etc/crontab
+        mode: "0600"
+
+    - name: Who may use cron (allow list instead of deny list)
+      ansible.builtin.copy:
+        dest: /etc/cron.allow
+        content: |
+          root
+          alex
+          ansible
+        mode: "0600"
+
+    - name: cron.deny is removed
+      ansible.builtin.file:
+        path: /etc/cron.deny
+        state: absent
+
+    - name: Directory for coredump settings
+      ansible.builtin.file:
+        path: /etc/systemd/coredump.conf.d
+        state: directory
+        mode: "0755"
+
+    - name: systemd doesn't store core dumps
+      ansible.builtin.copy:
+        dest: /etc/systemd/coredump.conf.d/50-pci.conf
+        content: |
+          [Coredump]
+          Storage=none
+          ProcessSizeMax=0
+        mode: "0644"
+
+    - name: Users can't create core dumps
+      ansible.builtin.copy:
+        dest: /etc/security/limits.d/50-pci-coredump.conf
+        content: |
+          * hard core 0
+        mode: "0644"
+
+    - name: Unused kernel modules can't be loaded
+      ansible.builtin.copy:
+        dest: "/etc/modprobe.d/{{ item }}.conf"
+        content: |
+          install {{ item }} /bin/false
+          blacklist {{ item }}
+        mode: "0644"
+      loop: [sctp, usb-storage]
+
+    - name: Disk encryption tools are installed
+      ansible.builtin.dnf:
+        name: cryptsetup
+        state: present
+
+    - name: Password quality
+      ansible.builtin.lineinfile:
+        path: /etc/security/pwquality.conf
+        regexp: '^#?\s*{{ item.key }}\s*='
+        line: "{{ item.key }} = {{ item.value }}"
+      loop:
+        - { key: minlen, value: 12 }
+        - { key: dcredit, value: -1 }
+        - { key: lcredit, value: -1 }
+
+    - name: PAM remembers old passwords
+      ansible.builtin.command: authselect enable-feature with-pwhistory
+      when: "'with-pwhistory' not in authselect_now.stdout"
+
+    - name: The last 4 passwords can't be reused
+      ansible.builtin.lineinfile:
+        path: /etc/security/pwhistory.conf
+        regexp: '^#?\s*remember\s*='
+        line: remember = 4
+
+    # AIDE poslednji: baza beleži stanje posle svih ostalih izmena
+    - name: AIDE database exists
+      ansible.builtin.shell: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+      args:
+        creates: /var/lib/aide/aide.db.gz
+
+    - name: AIDE checks every night
+      ansible.builtin.lineinfile:
+        path: /etc/crontab
+        regexp: 'aide --check'
+        line: "05 4 * * * root /usr/sbin/aide --check"
   handlers:
     - name: Reload sshd
       ansible.builtin.service:
