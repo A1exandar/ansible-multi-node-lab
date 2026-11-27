@@ -341,6 +341,23 @@
           Defaults timestamp_timeout=5
         mode: "0440"
         validate: /usr/sbin/visudo -cf %s
+# --- su i root na konzoli ---
+    - name: Empty group that controls su
+      ansible.builtin.group:
+        name: sugroup
+        state: present
+
+    - name: Only sugroup members may use su (nobody)
+      ansible.builtin.lineinfile:
+        path: /etc/pam.d/su
+        regexp: '^#?\s*auth\s+required\s+pam_wheel\.so'
+        line: "auth            required        pam_wheel.so use_uid group=sugroup"
+
+    - name: root can't log in on the console
+      ansible.builtin.copy:
+        dest: /etc/securetty
+        content: ""
+        mode: "0600"
   handlers:
     - name: Reload sshd
       ansible.builtin.service:
