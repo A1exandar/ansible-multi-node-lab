@@ -411,6 +411,64 @@
           readonly TMOUT
           export TMOUT
         mode: "0644"
+# --- firewalld: eksplicitne zone, pa tek onda drop kao default ---
+    - name: Firewall zones and default zone
+      ansible.builtin.include_role:
+        name: redhat.rhel_system_roles.firewall
+      vars:
+        firewall:
+          # 1. glavni interfejs EKSPLICITNO u public (pre promene default zone!)
+          - zone: public
+            interface: "{{ ansible_default_ipv4.interface }}"
+            state: enabled
+            permanent: true
+            runtime: true
+          # 2. u public samo ono što stvarno treba: ssh i http (repo za ostale čvorove)
+          - zone: public
+            service: [ssh, http]
+            state: enabled
+            permanent: true
+            runtime: true
+          - zone: public
+            service: [cockpit, dhcpv6-client]
+            state: disabled
+            permanent: true
+            runtime: true
+          # 3. loopback u trusted, ali samo za pravi loopback saobraćaj
+          - zone: trusted
+            interface: lo
+            state: enabled
+            permanent: true
+            runtime: true
+          - zone: trusted
+            rich_rule:
+              - 'rule family=ipv4 source address="127.0.0.1" destination not address="127.0.0.1" drop'
+              - 'rule family=ipv6 source address="::1" destination not address="::1" drop'
+            state: enabled
+            permanent: true
+            runtime: true
+          # 4. tek sada: sve što ne pripada nijednoj zoni se odbacuje
+          - set_default_zone: drop
+            state: enabled
+
+    - name: Only firewalld manages the firewall (nftables service masked)
+      ansible.builtin.systemd_service:
+        name: nftables
+        masked: true
+        state: stopped
+
+    # RHEL 10 nema polkit-pkla-compat: isto pravilo, ali u JavaScript obliku
+    - name: Only admins may change the network with nmcli
+      ansible.builtin.copy:
+        dest: /etc/polkit-1/rules.d/10-nm-harden-access.rules
+        content: |
+          polkit.addRule(function(action, subject) {
+              if (action.id.indexOf("org.freedesktop.NetworkManager.") == 0 &&
+                  subject.user != "root") {
+                  return polkit.Result.AUTH_ADMIN;
+              }
+          });
+        mode: "0644"
   handlers:
     - name: Reload sshd
       ansible.builtin.service:
