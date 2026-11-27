@@ -358,6 +358,59 @@
         dest: /etc/securetty
         content: ""
         mode: "0600"
+# --- Lozinke: istek, zaključavanje, neaktivna sesija ---
+    - name: New passwords expire after 90 days
+      ansible.builtin.lineinfile:
+        path: /etc/login.defs
+        regexp: '^\s*PASS_MAX_DAYS\s'
+        line: "PASS_MAX_DAYS   90"
+
+    - name: Accounts are disabled 90 days after the password expires
+      ansible.builtin.lineinfile:
+        path: /etc/default/useradd
+        regexp: '^\s*INACTIVE='
+        line: INACTIVE=90
+
+    - name: Read password data
+      ansible.builtin.getent:
+        database: shadow
+
+    # getent_shadow[korisnik] = [hash, poslednja promena, min, max, ...]
+    - name: Accounts with a password have a last change date
+      ansible.builtin.command: chage -d {{ ansible_date_time.date }} {{ item.key }}
+      loop: "{{ ansible_facts.getent_shadow | dict2items | selectattr('value.0', 'match', '^[$]') | list }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when: item.value[1] == ''
+
+    - name: Existing passwords expire after 90 days
+      ansible.builtin.command: chage -M 90 {{ item.key }}
+      loop: "{{ ansible_facts.getent_shadow | dict2items | selectattr('value.0', 'match', '^[$]') | list }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when: item.value[3] != '90'
+
+    - name: Turn on account lockout (faillock)
+      ansible.builtin.command: authselect enable-feature with-faillock
+      when: "'with-faillock' not in authselect_now.stdout"
+
+    - name: Lockout after 5 wrong passwords, for 30 minutes
+      ansible.builtin.lineinfile:
+        path: /etc/security/faillock.conf
+        regexp: '^#?\s*{{ item.key }}\s*='
+        line: "{{ item.key }} = {{ item.value }}"
+      loop:
+        - { key: deny, value: 5 }
+        - { key: unlock_time, value: 1800 }
+
+    - name: Idle shells close after 10 minutes
+      ansible.builtin.copy:
+        dest: /etc/profile.d/tmout.sh
+        content: |
+          TMOUT=600
+          readonly TMOUT
+          export TMOUT
+        mode: "0644"
   handlers:
     - name: Reload sshd
       ansible.builtin.service:
