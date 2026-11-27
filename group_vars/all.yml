@@ -1,0 +1,3 @@
+# Podrazumevano za sve: u firewall zoni public samo SSH
+pci_public_services: [ssh]
+pci_closed_services: [cockpit, dhcpv6-client, http]

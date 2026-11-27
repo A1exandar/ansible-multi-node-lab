@@ -1,5 +1,5 @@
 - name: PCI-DSS fixes
-  hosts: server1
+  hosts: server1:server2
   vars:
     pci_sysctl:
       net.ipv4.conf.all.rp_filter: 1
@@ -321,6 +321,11 @@
         line: remember = 4
 
     # AIDE poslednji: baza beleži stanje posle svih ostalih izmena
+# AIDE mora biti instaliran (na server1 je bio instaliran ručno)
+    - name: AIDE is installed
+      ansible.builtin.dnf:
+        name: aide
+        state: present
     - name: AIDE database exists
       ansible.builtin.shell: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
       args:
@@ -423,12 +428,12 @@
             runtime: true
           # 2. u public samo ono što stvarno treba: ssh i http (repo za ostale čvorove)
           - zone: public
-            service: [ssh, http]
+            service: "{{ pci_public_services }}"
             state: enabled
             permanent: true
             runtime: true
           - zone: public
-            service: [cockpit, dhcpv6-client]
+            service: "{{ pci_closed_services }}"
             state: disabled
             permanent: true
             runtime: true
