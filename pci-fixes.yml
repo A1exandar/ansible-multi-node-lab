@@ -331,6 +331,16 @@
         path: /etc/crontab
         regexp: 'aide --check'
         line: "05 4 * * * root /usr/sbin/aide --check"
+# --- sudo ---
+    - name: sudo settings
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/50-pci
+        content: |
+          Defaults use_pty
+          Defaults logfile=/var/log/sudo.log
+          Defaults timestamp_timeout=5
+        mode: "0440"
+        validate: /usr/sbin/visudo -cf %s
   handlers:
     - name: Reload sshd
       ansible.builtin.service:
