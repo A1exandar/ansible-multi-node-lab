@@ -407,9 +407,7 @@
       ansible.builtin.copy:
         dest: /etc/profile.d/tmout.sh
         content: |
-          TMOUT=600
-          readonly TMOUT
-          export TMOUT
+          typeset -xr TMOUT=600
         mode: "0644"
 # --- firewalld: eksplicitne zone, pa tek onda drop kao default ---
     - name: Firewall zones and default zone
